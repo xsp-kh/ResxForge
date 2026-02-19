@@ -9,8 +9,8 @@ class Program
     // ======================
     // CONFIG (HARD-CODED)
     // ======================
-    private const string ResxFolder = @"C:\Users\dell\source\repos\kampot\Resources";
-    private const string CacheFolder = @"C:\Users\dell\source\repos\translate";
+    private const string ResxFolder = @"C:\Users\xxx\source\repos\xxx\Resources";
+    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge";
     private static string OllamaModel = "translategemma:27b";
     private const string OllamaUrl = "http://127.0.0.1:11434/api/generate";
     private const string Excluded = "";

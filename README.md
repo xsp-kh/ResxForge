@@ -1,6 +1,15 @@
 <h1>ResxForge</h1>
 
 <p>
+    <strong>Open <code>Program.cs</code> and update the paths below to match your folder structure:</strong>
+</p>
+
+<pre>
+	private const string ResxFolder = @"C:\Path\To\Your\Resources";
+	private const string CacheFolder = @"C:\Path\To\Your\Project";
+</pre>
+
+<p>
 <strong>Deterministic, glossary-aware localization pipeline for <code>.resx</code> files powered by local LLMs (via Ollama).</strong>
 </p>
 
