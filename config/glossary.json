@@ -1,9 +1,13 @@
 {
-  "de": {
-    "International Village": "Internationales Dorf"
+  "km": {
+    "welcome": "change in"
   },
 
-  "it": {
-    "diligent": "diligente"
+  "zh": {
+    "welcome": "config folder"
+  },
+
+  "vi": {
+    "welcome": "glossary.json"
   }
 }

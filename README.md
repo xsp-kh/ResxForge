@@ -5,20 +5,29 @@
 </p>
 
 <pre>
-	private const string ResxFolder = @"C:\Path\To\Your\Resources";
-	private const string CacheFolder = @"C:\Path\To\Your\Project";
+    private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
+    private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
+    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
 </pre>
 
 <p>
-<strong>Deterministic, glossary-aware localization pipeline for <code>.resx</code> files powered by local LLMs (via Ollama).</strong>
+    <strong>Open <code>ResxForge.csproj</code> to change TargetFramework</strong>
+</p>
+
+<pre>
+    <TargetFramework>net10.0</TargetFramework>
+</pre>
+
+<p>
+    <strong>Deterministic, glossary-aware localization pipeline for <code>.resx</code> files powered by local LLMs (via Ollama).</strong>
 </p>
 
 <p>
-ResxForge automates translation of .NET resource files while maintaining control,
-consistency, and UI-safe rules.
+    ResxForge automates translation of .NET resource files while maintaining control, consistency, and UI-safe rules.
 </p>
 
 <div class="section">
+
 <h2>Why ResxForge?</h2>
 
 <p>Traditional LLM translation workflows:</p>
@@ -69,7 +78,18 @@ not generic document translation.
 <pre><code>dotnet run -- -p Index pepper</code></pre>
 
 <h3>Build</h3>
-<pre><code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true</code></pre>
+    <pre>
+        <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true</code>
+    </pre>
+
+    <p>
+        batch and batch-parallel available
+    </p>
+
+    <pre>
+        <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch</code>
+        <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch-parallel</code>
+    </pre>
 
 <h3>Use smaller model</h3>
 <pre><code>dotnet run -- -m 4b</code></pre>

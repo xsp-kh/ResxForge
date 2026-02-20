@@ -11,7 +11,7 @@ class Program
     // ======================
     private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
     private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
-    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
+    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache-batch";
     private static string OllamaModel = "translategemma:27b";
     private const string OllamaUrl = "http://127.0.0.1:11434/api/generate";
     private const string Excluded = "";
@@ -30,7 +30,7 @@ class Program
     private static readonly StringBuilder FinalLog = new();
     private static readonly HttpClient Http = new()
     {
-        Timeout = TimeSpan.FromMinutes(15)
+        Timeout = TimeSpan.FromMinutes(30)
     };
 
     private static Process? OllamaProcess;
@@ -100,7 +100,6 @@ class Program
 
     private static FileSystemWatcher? GlossaryWatcher;
     private static FileSystemWatcher? EchoWatcher;
-
 
     // ======================
     // GLOSSARY CONFIG
@@ -246,45 +245,24 @@ class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
 
-        if (args.Contains("-h"))
-        {
-            Console.WriteLine(@"
-                ==============================
-                TRANSLATION TOOL - HELP
-                ==============================
-
-                -m | model size 27b (default), others are 4b and 12b | -m 4b
-                -l | translating only one language | Example: -l zh
-                -p | Razor Page | -p seahorse or -p seahorese durian
-                -d | add directoty to path | -d city or -d city offices
-                -f | force overwrite cache, keep existing when used with -p | -f -p seahorse | only seahorse cache change
-
-                ==============================
-            ");
-            return;
-        }
-
+        // ==========================
+        // Config & Command-Line Args
+        // ==========================
         ForceOverwriteCache = args.Contains("-f");
 
         List<string> workingResxFolders = new() { ResxFolder };
 
+        // Handle -d folder argument
         var dirArgIndex = Array.FindIndex(args, a => a == "-d");
         if (dirArgIndex >= 0)
         {
             workingResxFolders = new List<string>();
-
             for (int i = dirArgIndex + 1; i < args.Length && !args[i].StartsWith("-"); i++)
             {
                 var inputDir = args[i];
-
-                // Find matching subdirectory (case-insensitive)
                 var match = Directory
                     .GetDirectories(ResxFolder)
-                    .FirstOrDefault(d =>
-                        string.Equals(
-                            Path.GetFileName(d),
-                            inputDir,
-                            StringComparison.OrdinalIgnoreCase));
+                    .FirstOrDefault(d => string.Equals(Path.GetFileName(d), inputDir, StringComparison.OrdinalIgnoreCase));
 
                 if (match != null)
                 {
@@ -293,27 +271,20 @@ class Program
                 }
                 else
                 {
-                    Console.WriteLine($"⚠ Subdirectory '{inputDir}' not found inside Resources. Skipping.");
+                    Console.WriteLine($"⚠ Subdirectory '{inputDir}' not found. Skipping.");
                 }
             }
-
-            // Fallback if no valid dirs found
-            if (!workingResxFolders.Any())
-                workingResxFolders.Add(ResxFolder);
+            if (!workingResxFolders.Any()) workingResxFolders.Add(ResxFolder);
         }
 
+        // Handle -p specific resource argument
         List<string>? specificResources = null;
-
         var pathArgIndex = Array.FindIndex(args, a => a == "-p");
         if (pathArgIndex >= 0)
         {
             specificResources = new List<string>();
-
             for (int i = pathArgIndex + 1; i < args.Length && !args[i].StartsWith("-"); i++)
-            {
                 specificResources.Add(args[i]);
-            }
-
             if (specificResources.Any())
                 Console.WriteLine($"📌 Translating only resources: {string.Join(", ", specificResources)}");
         }
@@ -322,143 +293,148 @@ class Program
         Directory.CreateDirectory(CacheFolder);
         Directory.CreateDirectory(ConfigFolder);
 
-        // Load JSON configs
+        // Load glossary & echo config
         LoadGlossary();
         LoadEchoConfig();
+        StartHotReload(GlossaryPath, ref GlossaryWatcher, LoadGlossary, "glossary.json");
+        StartHotReload(EchoPath, ref EchoWatcher, LoadEchoConfig, "echo.json");
 
-        StartHotReload(
-            GlossaryPath,
-            ref GlossaryWatcher,
-            LoadGlossary,
-            "glossary.json");
-
-        StartHotReload(
-            EchoPath,
-            ref EchoWatcher,
-            LoadEchoConfig,
-            "echo.json");
-
-        // Model override
+        // Handle -m model argument
         var modelArgIndex = Array.FindIndex(args, a => a == "-m");
         if (modelArgIndex >= 0 && args.Length > modelArgIndex + 1)
         {
-            var modelSize = args[modelArgIndex + 1];
-            OllamaModel = $"translategemma:{modelSize}";
+            OllamaModel = $"translategemma:{args[modelArgIndex + 1]}";
             Console.WriteLine($"🔧 Using model: {OllamaModel}");
         }
         else Console.WriteLine($"🔧 Using default model: {OllamaModel}");
 
-        // Multi-language override
+        // Handle -l language argument
         List<string> targetLangs = TargetLangs.ToList();
         var langArgIndex = Array.FindIndex(args, a => a == "-l");
-
         if (langArgIndex >= 0)
         {
             var selectedLangs = new List<string>();
-
             for (int i = langArgIndex + 1; i < args.Length && !args[i].StartsWith("-"); i++)
             {
                 var lang = args[i].ToLower();
-
-                if (Languages.Contains(lang))
-                {
-                    selectedLangs.Add(lang);
-                }
-                else
-                {
-                    Console.WriteLine($"⚠ Unknown language '{lang}', skipping.");
-                }
+                if (Languages.Contains(lang)) selectedLangs.Add(lang);
+                else Console.WriteLine($"⚠ Unknown language '{lang}', skipping.");
             }
-
             if (selectedLangs.Any())
             {
                 targetLangs = selectedLangs;
                 Console.WriteLine($"🌍 Translating only to: {string.Join(", ", targetLangs)}");
             }
-            else
-            {
-                Console.WriteLine("⚠ No valid languages provided after -l. Using all target languages.");
-            }
         }
 
         Console.WriteLine("🚀 Starting translation...");
 
-        if (!await IsOllamaRunning())
-        {
-            await StartOllamaServerAsync();
-        }
+        // Start Ollama if not running
+        if (!await IsOllamaRunning()) await StartOllamaServerAsync();
 
+        // ==========================
+        // Concurrency Control
+        // ==========================
+        var maxConcurrent = 3; // Limit concurrent language translations
+        var semaphore = new SemaphoreSlim(maxConcurrent);
+
+        // ==========================
+        // Enumerate base .resx files
+        // ==========================
         var baseFiles = new List<string>();
-
         foreach (var folder in workingResxFolders)
         {
             baseFiles.AddRange(
                 Directory.EnumerateFiles(folder, "*.resx", SearchOption.AllDirectories)
-                .Where(f =>
-                    string.IsNullOrWhiteSpace(Excluded) ||
-                    !f.Split(Path.DirectorySeparatorChar)
-                    .Any(dir => dir.Equals(Excluded, StringComparison.OrdinalIgnoreCase))
-                )
-                .Where(f =>
-                    !Languages.Any(l => f.EndsWith($".{l}.resx", StringComparison.OrdinalIgnoreCase))
-                )
+                .Where(f => string.IsNullOrWhiteSpace(Excluded) || !f.Split(Path.DirectorySeparatorChar).Any(dir => dir.Equals(Excluded, StringComparison.OrdinalIgnoreCase)))
+                .Where(f => !Languages.Any(l => f.EndsWith($".{l}.resx", StringComparison.OrdinalIgnoreCase)))
                 .Where(f =>
                 {
-                    if (specificResources == null || !specificResources.Any())
-                        return true;
-
+                    if (specificResources == null || !specificResources.Any()) return true;
                     var fileNameWithoutExt = Path.GetFileNameWithoutExtension(f);
-                    return specificResources
-                        .Any(r => fileNameWithoutExt.Equals(r, StringComparison.OrdinalIgnoreCase));
+                    return specificResources.Any(r => fileNameWithoutExt.Equals(r, StringComparison.OrdinalIgnoreCase));
                 })
             );
         }
 
+        // ==========================
+        // Process each base file
+        // ==========================
         foreach (var baseFile in baseFiles)
         {
             Console.WriteLine($"\n📄 {Path.GetFileName(baseFile)}");
             var baseDoc = XDocument.Load(baseFile);
             var pageName = Path.GetFileNameWithoutExtension(baseFile);
 
-            foreach (var lang in targetLangs)
+            // --------------------------
+            // Create language tasks
+            // --------------------------
+            var tasks = targetLangs.Select(async lang =>
             {
-                CurrentCacheFile = Path.Combine(CacheFolder, $"cache_{lang}.json");
-                LoadCache();
-
-                Console.WriteLine($"🌍 {lang}");
-                var stopwatch = Stopwatch.StartNew();
-
-                var newDoc = new XDocument(baseDoc);
-
-                foreach (var data in newDoc.Descendants("data"))
+                await semaphore.WaitAsync();
+                try
                 {
-                    var value = data.Element("value");
-                    if (value == null || string.IsNullOrWhiteSpace(value.Value))
-                        continue;
+                    CurrentCacheFile = Path.Combine(CacheFolder, $"cache_{lang}.json");
+                    LoadCache();
 
-                    var source = value.Value;
-                    var key = data.Attribute("name")?.Value ?? "alt";
+                    Console.WriteLine($"🌍 {lang}");
+                    var stopwatch = Stopwatch.StartNew();
 
-                    var translated = await TranslateAsync(source, lang, key, pageName);
-                    if (translated != null)
-                    {
-                        value.Value = translated;
-                    }
+                    var newDoc = new XDocument(baseDoc);
+
+                    // Get all data elements
+                    var dataElements = newDoc.Descendants("data")
+                        .Where(d => d.Element("value") != null && !string.IsNullOrWhiteSpace(d.Element("value")!.Value))
+                        .ToList();
+
+                    var sources = dataElements.Select(d => d.Element("value")!.Value).ToList();
+
+                    // --------------------------
+                    // Step 3: Batch translation
+                    // --------------------------
+                    var translations = await TranslateBatchAsync(sources, lang, pageName, batchSize: 20);
+
+                    for (int i = 0; i < dataElements.Count; i++)
+                        dataElements[i].Element("value")!.Value = translations[i];
+
+                    var outPath = baseFile.Replace(".resx", $".{lang}.resx");
+                    newDoc.Save(outPath);
+                    SaveCache();
+
+                    stopwatch.Stop();
+                    Console.WriteLine($"✅ Written {Path.GetFileName(outPath)} ({stopwatch.Elapsed.TotalSeconds:F2} sec)");
                 }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
 
-                var outPath = baseFile.Replace(".resx", $".{lang}.resx");
-                newDoc.Save(outPath);
-                SaveCache();
-
-                stopwatch.Stop();
-                Console.WriteLine($"✅ Written {Path.GetFileName(outPath)} ({stopwatch.Elapsed.TotalSeconds:F2} sec)");
-            }
+            // Run all languages concurrently (up to maxConcurrent)
+            await Task.WhenAll(tasks);
         }
 
+        // ==========================
+        // Final logging
+        // ==========================
         WriteFinalLog(workingResxFolders, specificResources);
         Console.WriteLine("\n🎉 Done");
         Console.WriteLine("\nPress Enter to exit...");
         Console.ReadLine();
+    }
+
+
+    private static async Task<List<string>> TranslateBatchAsync(List<string> texts, string lang, string pageName, int batchSize = 20)
+    {
+        var combinedText = string.Join("\n---\n", texts);
+        var translatedCombined = await TranslateAsync(combinedText, lang, "batch", pageName);
+
+        var translatedList = translatedCombined?.Split("\n---\n", StringSplitOptions.None)
+                            .Select(s => s.Trim())
+                            .ToList()
+                            ?? Enumerable.Repeat(string.Empty, texts.Count).ToList();
+
+        return translatedList;
     }
 
     // ======================

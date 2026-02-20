@@ -7,4 +7,18 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(AppVariant)'=='' Or '$(AppVariant)'=='single'">
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(AppVariant)'=='batch'">
+    <Compile Include="Program-batch.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(AppVariant)'=='batch-parallel'">
+    <Compile Include="Program-batch-parallel.cs" />
+  </ItemGroup>
+
 </Project>

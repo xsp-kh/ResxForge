@@ -11,7 +11,7 @@ class Program
     // ======================
     private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
     private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
-    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
+    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache-batch";
     private static string OllamaModel = "translategemma:27b";
     private const string OllamaUrl = "http://127.0.0.1:11434/api/generate";
     private const string Excluded = "";
@@ -100,7 +100,6 @@ class Program
 
     private static FileSystemWatcher? GlossaryWatcher;
     private static FileSystemWatcher? EchoWatcher;
-
 
     // ======================
     // GLOSSARY CONFIG
@@ -430,20 +429,17 @@ class Program
 
                 var newDoc = new XDocument(baseDoc);
 
-                foreach (var data in newDoc.Descendants("data"))
+                var dataElements = newDoc.Descendants("data")
+                    .Where(d => d.Element("value") != null && !string.IsNullOrWhiteSpace(d.Element("value")!.Value))
+                    .ToList();
+                
+                var sources = dataElements.Select(d => d.Element("value")!.Value).ToList();
+
+                var translations = await TranslateBatchAsync(sources, lang, pageName);
+
+                for (int i = 0; i < dataElements.Count; i++)
                 {
-                    var value = data.Element("value");
-                    if (value == null || string.IsNullOrWhiteSpace(value.Value))
-                        continue;
-
-                    var source = value.Value;
-                    var key = data.Attribute("name")?.Value ?? "alt";
-
-                    var translated = await TranslateAsync(source, lang, key, pageName);
-                    if (translated != null)
-                    {
-                        value.Value = translated;
-                    }
+                    dataElements[i].Element("value")!.Value = translations[i];
                 }
 
                 var outPath = baseFile.Replace(".resx", $".{lang}.resx");
@@ -459,6 +455,19 @@ class Program
         Console.WriteLine("\n🎉 Done");
         Console.WriteLine("\nPress Enter to exit...");
         Console.ReadLine();
+    }
+
+    private static async Task<List<string>> TranslateBatchAsync(List<string> texts, string lang, string pageName)
+    {
+        var combinedText = string.Join("\n---\n", texts);
+        var translatedCombined = await TranslateAsync(combinedText, lang, "batch", pageName);
+
+        var translatedList = translatedCombined?.Split("\n---\n", StringSplitOptions.None)
+                            .Select(s => s.Trim())
+                            .ToList()
+                            ?? Enumerable.Repeat(string.Empty, texts.Count).ToList();
+
+        return translatedList;
     }
 
     // ======================
