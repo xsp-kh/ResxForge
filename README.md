@@ -18,6 +18,8 @@ private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
 <TargetFramework>net10.0</TargetFramework>
 </pre>
 
+![console app](cmd.jpg)
+
 <p>
 <strong>Deterministic, glossary-aware localization pipeline for <code>.resx</code> files powered by local LLMs (via Ollama).</strong>
 </p>
