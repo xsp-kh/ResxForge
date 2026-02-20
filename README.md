@@ -1,29 +1,29 @@
 <h1>ResxForge</h1>
 
 <p>
-    <strong>Open <code>Program.cs</code> and update the paths below to match your folder structure:</strong>
+<strong>Open <code>Program.cs</code> and update the paths below to match your folder structure:</strong>
 </p>
 
 <pre>
-    private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
-    private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
-    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
+private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
+private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
+private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
 </pre>
 
 <p>
-    <strong>Open <code>ResxForge.csproj</code> to change TargetFramework</strong>
+<strong>Open <code>ResxForge.csproj</code> to change TargetFramework</strong>
 </p>
 
 <pre>
-    <TargetFramework>net10.0</TargetFramework>
+<TargetFramework>net10.0</TargetFramework>
 </pre>
 
 <p>
-    <strong>Deterministic, glossary-aware localization pipeline for <code>.resx</code> files powered by local LLMs (via Ollama).</strong>
+<strong>Deterministic, glossary-aware localization pipeline for <code>.resx</code> files powered by local LLMs (via Ollama).</strong>
 </p>
 
 <p>
-    ResxForge automates translation of .NET resource files while maintaining control, consistency, and UI-safe rules.
+ResxForge automates translation of .NET resource files while maintaining control, consistency, and UI-safe rules.
 </p>
 
 <div class="section">
@@ -78,18 +78,16 @@ not generic document translation.
 <pre><code>dotnet run -- -p Index pepper</code></pre>
 
 <h3>Build</h3>
-    <pre>
-        <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true</code>
-    </pre>
+<pre>
+<code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true</code>
+</pre>
 
-    <p>
-        batch and batch-parallel available
-    </p>
+batch and batch-parallel available
 
-    <pre>
-        <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch</code>
-        <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch-parallel</code>
-    </pre>
+<pre>
+<code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch</code>
+<code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch-parallel</code>
+</pre>
 
 <h3>Use smaller model</h3>
 <pre><code>dotnet run -- -m 4b</code></pre>
