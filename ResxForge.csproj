@@ -20,5 +20,8 @@
   <ItemGroup Condition="'$(AppVariant)'=='batch-parallel'">
     <Compile Include="Program-batch-parallel.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="cache\" />
+  </ItemGroup>
 
 </Project>

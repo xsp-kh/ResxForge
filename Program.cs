@@ -9,13 +9,37 @@ class Program
     // ======================
     // CONFIG (HARD-CODED)
     // ======================
-    private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
-    private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
-    private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
+
     private static string OllamaModel = "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest";
-    //private static string OllamaModel = "translategemma:27b";
     private const string OllamaUrl = "http://127.0.0.1:11434/api/generate";
     private const string Excluded = "";
+
+    private static readonly string ProjectRoot = GetProjectRoot();
+
+    private static string GetProjectRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (dir != null &&
+               !Directory.Exists(Path.Combine(dir.FullName, "config")))
+        {
+            dir = dir.Parent;
+        }
+
+        if (dir == null)
+            throw new DirectoryNotFoundException("Project root not found.");
+
+        return dir.FullName;
+    }
+
+    private static readonly string ConfigFolder =
+        Path.Combine(ProjectRoot, "config");
+
+    private static readonly string CacheFolder =
+        Path.Combine(ProjectRoot, "cache");
+
+    private static readonly string ResxFolder =
+        Path.Combine(ProjectRoot, "Resources");
 
     private static readonly HashSet<string> ReviewLogExcludedPages =
         new(StringComparer.OrdinalIgnoreCase)
