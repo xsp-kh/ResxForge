@@ -91,9 +91,6 @@ batch and batch-parallel available
 <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch-parallel</code>
 </pre>
 
-<h3>Use smaller model</h3>
-<pre><code>dotnet run -- -m 4b</code></pre>
-
 <h3>Force cache rewrite</h3>
 <pre><code>dotnet run -- -f</code></pre>
 

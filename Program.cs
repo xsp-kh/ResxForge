@@ -12,7 +12,8 @@ class Program
     private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
     private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
     private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
-    private static string OllamaModel = "translategemma:27b";
+    private static string OllamaModel = "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest";
+    //private static string OllamaModel = "translategemma:27b";
     private const string OllamaUrl = "http://127.0.0.1:11434/api/generate";
     private const string Excluded = "";
 
@@ -51,7 +52,13 @@ class Program
     // ======================
     private static readonly List<string> Languages = new()
     {
-        "km","zh","vi","th","de","ja","fr","id","ms","ko","nl","it","es","hi","ru","pt","cs","lo","sv"
+        // === GROUP 1: SEA-LION-v4-27B ===
+        // (Southeast Asian & East Asian focus)
+        "km", "zh", "vi", "th", "ja", "lo", "id", "ms", "ko",
+
+        // === GROUP 2: TranslateGemma-27B ===
+        // (European & Western focus)
+        "fr", "de", "es", "nl", "it", "pt", "ru", "cs", "sv", "hi"
     };
 
     private static IReadOnlyList<string> TargetLangs => Languages.Where(l => l != "en").ToList();
@@ -253,9 +260,8 @@ class Program
                 TRANSLATION TOOL - HELP
                 ==============================
 
-                -m | model size 27b (default), others are 4b and 12b | -m 4b
                 -l | translating only one language | Example: -l zh
-                -p | Razor Page | -p seahorse or -p seahorese durian
+                -p | Razor Page | -p seahorse or -p seahorse durian
                 -d | add directoty to path | -d city or -d city offices
                 -f | force overwrite cache, keep existing when used with -p | -f -p seahorse | only seahorse cache change
 
@@ -338,16 +344,6 @@ class Program
             LoadEchoConfig,
             "echo.json");
 
-        // Model override
-        var modelArgIndex = Array.FindIndex(args, a => a == "-m");
-        if (modelArgIndex >= 0 && args.Length > modelArgIndex + 1)
-        {
-            var modelSize = args[modelArgIndex + 1];
-            OllamaModel = $"translategemma:{modelSize}";
-            Console.WriteLine($"🔧 Using model: {OllamaModel}");
-        }
-        else Console.WriteLine($"🔧 Using default model: {OllamaModel}");
-
         // Multi-language override
         List<string> targetLangs = TargetLangs.ToList();
         var langArgIndex = Array.FindIndex(args, a => a == "-l");
@@ -420,39 +416,54 @@ class Program
             var baseDoc = XDocument.Load(baseFile);
             var pageName = Path.GetFileNameWithoutExtension(baseFile);
 
-            foreach (var lang in targetLangs)
+        string lastModel = "";
+
+        foreach (var lang in targetLangs)
+        {
+            string activeModel = (lang == "km" || lang == "lo" || lang == "th" || lang == "vi" || 
+                                lang == "zh" || lang == "ja" || lang == "ko" || lang == "id" || lang == "ms") 
+                                ? "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest" 
+                                : "translategemma:27b";
+
+            if (activeModel != lastModel && !string.IsNullOrEmpty(lastModel))
             {
-                CurrentCacheFile = Path.Combine(CacheFolder, $"cache_{lang}.json");
-                LoadCache();
-
-                Console.WriteLine($"🌍 {lang}");
-                var stopwatch = Stopwatch.StartNew();
-
-                var newDoc = new XDocument(baseDoc);
-
-                foreach (var data in newDoc.Descendants("data"))
-                {
-                    var value = data.Element("value");
-                    if (value == null || string.IsNullOrWhiteSpace(value.Value))
-                        continue;
-
-                    var source = value.Value;
-                    var key = data.Attribute("name")?.Value ?? "alt";
-
-                    var translated = await TranslateAsync(source, lang, key, pageName);
-                    if (translated != null)
-                    {
-                        value.Value = translated;
-                    }
-                }
-
-                var outPath = baseFile.Replace(".resx", $".{lang}.resx");
-                newDoc.Save(outPath);
-                SaveCache();
-
-                stopwatch.Stop();
-                Console.WriteLine($"✅ Written {Path.GetFileName(outPath)} ({stopwatch.Elapsed.TotalSeconds:F2} sec)");
+                Console.WriteLine($"🔄 MODEL SWITCH: Unloading {lastModel} and loading {activeModel}...");
+                Console.WriteLine("⏳ This may take 30-60 seconds ...");
+                Console.WriteLine();
             }
+            lastModel = activeModel;
+
+            CurrentCacheFile = Path.Combine(CacheFolder, $"cache_{lang}.json");
+            LoadCache();
+
+            Console.WriteLine($"🌍 {lang} (Using: {activeModel})");
+            var stopwatch = Stopwatch.StartNew();
+
+            var newDoc = new XDocument(baseDoc);
+
+            foreach (var data in newDoc.Descendants("data"))
+            {
+                var value = data.Element("value");
+                if (value == null || string.IsNullOrWhiteSpace(value.Value))
+                    continue;
+
+                var source = value.Value;
+                var key = data.Attribute("name")?.Value ?? "alt";
+
+                // Pass the activeModel to the translation function
+                var translated = await TranslateAsync(source, lang, key, pageName, activeModel);
+                if (translated != null)
+                {
+                    value.Value = translated;
+                }
+            }
+
+            var outPath = baseFile.Replace(".resx", $".{lang}.resx");
+            newDoc.Save(outPath);
+
+            stopwatch.Stop();
+            Console.WriteLine($"✅ Written {Path.GetFileName(outPath)} ({stopwatch.Elapsed.TotalSeconds:F2} sec)");
+        }
         }
 
         WriteFinalLog(workingResxFolders, specificResources);
@@ -464,41 +475,37 @@ class Program
     // ======================
     // TRANSLATE
     // ======================
-    private static async Task<string?> TranslateAsync(string text, string lang, string key, string pageName)
+    private static async Task<string?> TranslateAsync(string text, string lang, string key, string pageName, string modelName)
     {
         if (KeyOverrides.TryGetValue(lang, out var langOverrides) &&
             langOverrides.TryGetValue(key, out var fixedTranslation))
         {
             Console.WriteLine($"🔒 [Override {lang} {key}] {text}\n➡️ {fixedTranslation}");
-            Console.WriteLine();
-
-            FinalLog.AppendLine($"{lang} {key} | {fixedTranslation}");
-            FinalLog.AppendLine();
-
+            FinalLog.AppendLine($"{lang} {key} | {fixedTranslation}\n");
             return fixedTranslation;
         }
 
-        var cacheKey = $"{lang}||{text}";
+        string cleanText = text.Replace("\r", "").Replace("\n", " ").Trim();
+        var cacheKey = $"{lang}||{cleanText}";
 
-        // ---------- CACHE HIT ----------
         if (Cache.TryGetValue(cacheKey, out var cached) && !ForceOverwriteCache)
         {
-            Console.WriteLine($"[Cache hit {lang} {key}] {text}\n➡️ {cached}");
-            Console.WriteLine();
-
-            FinalLog.AppendLine($"{lang} {key} | {cached}");
-            FinalLog.AppendLine();
-
+            Console.WriteLine($"[Cache hit {lang} {key}] {text}\n➡️ {cached}\n");
+            FinalLog.AppendLine($"{lang} {key} | {cached}\n");
             return cached;
         }
 
-        // ---------- TRANSLATION ----------
+        // ---------- UPDATED PAYLOAD FOR HARDWARE OPTIMIZATION ----------
         var payload = new
         {
-            model = OllamaModel,
+            model = modelName, // Uses the model passed from the loop
             prompt = BuildPrompt(text, lang),
-            temperature = 0,
-            max_tokens = 150
+            options = new {
+                temperature = 0,
+                num_thread = 8,   // Fixes the 50% CPU usage by saturating physical cores
+                num_ctx = 4096    // Keeps memory bandwidth usage efficient
+            },
+            keep_alive = "5m" // Keeps the model ready for 5 minutes of inactivity
         };
 
         try
@@ -531,6 +538,7 @@ class Program
                 translated = translated.TrimEnd('.', '!', '?');
             }
 
+            // Logic for Echo/Leakage detection remains the same...
             bool echo = IsEnglishEcho(text, translated);
             bool leak = HasScriptLeakage(lang, translated);
 
@@ -538,43 +546,22 @@ class Program
             {
                 if (!ReviewLogExcludedPages.Contains(pageName))
                 {
-                    Console.WriteLine($"⚠ {pageName} [{lang} {key}]");
-                    Console.WriteLine($"   Source: {text}");
-                    Console.WriteLine($"   Output: {translated}");
-                    Console.WriteLine();
-
                     WriteReviewLog(pageName, lang, key, text, translated);
-
-                    FinalLog.AppendLine($"⚠ {pageName} [{lang} {key}]");
-                    FinalLog.AppendLine($"Source: {text}");
-                    FinalLog.AppendLine($"Output: {translated}");
-                    FinalLog.AppendLine();
+                    FinalLog.AppendLine($"⚠ {pageName} [{lang} {key}]\nSource: {text}\nOutput: {translated}\n");
                 }
             }
 
-            // ---------- CACHE STORE ----------
             Cache[cacheKey] = translated;
+            SaveCache();
+            FinalLog.AppendLine($"{lang} {key} | {translated}\n");
 
-            FinalLog.AppendLine($"{lang} {key} | {translated}");
-            FinalLog.AppendLine();
-
-            if (ForceOverwriteCache)
-            {
-                Console.WriteLine($"♻️ [Rewrite {lang} {key}] {text}\n➡️ {translated}");
-            }
-            else
-            {
-                Console.WriteLine($"[Cached {lang} {key}] {text}\n➡️ {translated}");
-            }
-
-            Console.WriteLine();
+            Console.WriteLine($"[{(ForceOverwriteCache ? "Rewrite" : "New")} {lang} {key}] {text}\n➡️ {translated}\n");
 
             return translated;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"⚠ Translation failed [{lang} {key}]: {ex.Message}");
-            Console.WriteLine();
+            Console.WriteLine($"⚠ Translation failed [{lang} {key}]: {ex.Message}\n");
             return null;
         }
     }
@@ -582,56 +569,70 @@ class Program
     // ======================
     // PROMPT
     // ======================
-    private static string BuildPrompt(string text, string lang)
+private static string BuildPrompt(string text, string lang)
+{
+    var langName = LangNames.GetValueOrDefault(lang, lang);
+
+    var glossarySection = "";
+    if (Glossaries.TryGetValue(lang, out var glossary) && glossary.Any())
     {
-        var langName = LangNames.GetValueOrDefault(lang, lang);
-
-        var glossarySection = "";
-        if (Glossaries.TryGetValue(lang, out var glossary) && glossary.Any())
-        {
-            glossarySection = "Use the following glossary: " +
-                string.Join(", ", glossary.Select(p => $"\"{p.Key}\" ➡️ \"{p.Value}\"")) + ".";
-        }
-
-        string numberInstruction = lang switch
-        {
-            "km" => "Translate all digits into Khmer numerals (០-៩). For years, use Khmer numerals in AD format (e.g., '2024' to '២០២៤').",
-            "zh" or "ja" => "Use Arabic numerals for years (e.g., '2024年'). For other numbers, use native characters if appropriate for formal context, otherwise maintain Arabic numerals.",
-            "th" => "Translate all digits into Thai numerals. Convert years to Buddhist Era (add 543) before translating digits.",
-            "lo" => "Translate all digits into Lao numerals (໐-໙). Convert years to Buddhist Era (add 543) before translating digits.",
-            "fr" or "de" or "it" or "es" or "pt" or "ru" or "sv" or "nl" or "cs" =>
-                $"For {langName}: Use Arabic numerals. Use a space or dot for thousands and a comma for decimals (European style).",
-            "vi" => "Use Arabic numerals: use a dot (.) for thousands and a comma (,) for decimals. For years, always include the word 'năm' (e.g., 'năm 2024').",
-            "hi" => "Use standard Arabic numerals (0-9). Devanagari numerals are not required for this modern UI context.",
-            _ => "Maintain standard Arabic numerals and original numeric formatting."
-        };
-
-        string styleInstruction = lang switch
-        {
-            "de" or "nl" or "sv" => 
-                $"For {langName}: Avoid hyphens between nouns. Use natural spaces or compound words (e.g., 'Durian Kreisverkehr', NOT 'Durian-Kreisverkehr', 'Bokor Berg' NOT 'Bokor-Berg', 'Tourismus Hafen' NOT 'Tourismus-Hafen').",
-            _ => ""
-        };
-
-        return $"""
-        You are a professional English translator to {langName} specializing in Software Resource Files (.resx).
-        Translate UI strings and labels accurately, maintaining the original meaning and technical style.
-
-        RULES:
-        - {numberInstruction}
-        - {styleInstruction}
-        - Keep translations concise to fit UI elements.
-        - Do not add any punctuation at the end that is not present in the original text.
-        - If the input is only a name or short phrase, produce it naturally without commas.
-        - Produce ONLY the translation. No explanations or commentary.
-        - Do NOT include any English words in the output unless they are proper nouns.
-        - The output must be fully written in {langName}.
-        {glossarySection}
-
-
-        {text}
-        """;
+        glossarySection = "Use the following glossary: " +
+            string.Join(", ", glossary.Select(p => $"\"{p.Key}\" ➡️ \"{p.Value}\"")) + ".";
     }
+
+    // --- 1. NUMERIC FORMATTING ---
+    string numberInstruction = lang switch
+    {
+        "km" => "Translate all digits into Khmer numerals (០-៩). For years, use Khmer numerals in AD format (e.g., '2024' to '២០២៤').",
+        "zh" or "ja" => "Use Arabic numerals for years (e.g., '2024年'). For other numbers, use native characters if appropriate for formal context, otherwise maintain Arabic numerals.",
+        "th" => "Translate all digits into Thai numerals. Convert years to Buddhist Era (add 543) before translating digits.",
+        "lo" => "Translate all digits into Lao numerals (໐-໙). Convert years to Buddhist Era (add 543) before translating digits.",
+        "fr" or "de" or "it" or "es" or "pt" or "ru" or "sv" or "nl" or "cs" =>
+            $"For {langName}: Use Arabic numerals. Use a space or dot for thousands and a comma for decimals (European style).",
+        "vi" => "Use Arabic numerals: use a dot (.) for thousands and a comma (,) for decimals. For years, always include the word 'năm' (e.g., 'năm 2024').",
+        "hi" => "Use standard Arabic numerals (0-9). Devanagari numerals are not required for this modern UI context.",
+        _ => "Maintain standard Arabic numerals and original numeric formatting."
+    };
+
+    // --- 2. SCRIPT-SPECIFIC CONSTRAINTS (ZWSP for KM/LO) ---
+    string scriptInstruction = lang switch
+    {
+        "km" => "The output must be in Khmer Unicode. Use Zero Width Spaces (ZWSP) between words to ensure correct word wrapping in the UI.",
+        "lo" => "The output must be in Lao Unicode. Use Zero Width Spaces (ZWSP) between words to ensure correct word wrapping in the UI.",
+        _ => ""
+    };
+
+    // --- 3. STYLE & COMPOUND NOUNS (DE/NL/SV) ---
+    string styleInstruction = lang switch
+    {
+        "de" or "nl" or "sv" => 
+            $"- CRITICAL: Do NOT use hyphens (-) to join nouns. {langName} prefers compound words. " +
+            "Examples of WRONG: 'Kampot-Bus', 'Durian-Frucht'. " +
+            "Examples of CORRECT: 'Kampotbus', 'Durianfrucht'. " +
+            "If unsure, use a single space, NEVER a hyphen.",
+        _ => ""
+    };
+
+return $"""
+You are a professional English translator to {langName} specializing in Software Resource Files (.resx).
+Translate UI strings and labels accurately, maintaining the original meaning and technical style.
+
+RULES:
+- {numberInstruction}
+- Translate symbols like '&' or '+' into the equivalent words in {langName} (e.g., 'and' or 'plus').
+{(string.IsNullOrWhiteSpace(scriptInstruction) ? "" : "- " + scriptInstruction)}
+{styleInstruction}
+- Keep translations concise to fit UI elements.
+- Do not add any punctuation at the end that is not present in the original text.
+- Produce ONLY the translation. No explanations or commentary.
+- Do NOT include any English words in the output unless they are proper nouns.
+- The output must be fully written in {langName}.
+{glossarySection}
+
+
+{text}
+""";
+}
 
     // ======================
     // CHECK / START OLLAMA
@@ -729,7 +730,8 @@ class Program
         return lang switch
         {
             "km" or "lo" or "th" or "ru" or "hi" or "zh" or "ja" or "ko"
-                => Regex.IsMatch(text, "[A-Za-z]"),
+                // Flags English letters [A-Za-z] OR the ampersand [&]
+                => Regex.IsMatch(text, "[A-Za-z]|&"), 
             _ => false
         };
     }
@@ -816,30 +818,38 @@ class Program
     // ======================
     private static void LoadCache()
     {
+        // Initialize with OrdinalIgnoreCase so "Kampot" matches "kampot"
+        Cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         if (!string.IsNullOrEmpty(CurrentCacheFile) && File.Exists(CurrentCacheFile))
         {
             try
             {
-                Cache = JsonSerializer.Deserialize<Dictionary<string, string>>(
-                    File.ReadAllText(CurrentCacheFile)
-                ) ?? new Dictionary<string, string>();
+                var rawJson = File.ReadAllText(CurrentCacheFile);
+                var loaded = JsonSerializer.Deserialize<Dictionary<string, string>>(rawJson);
 
-                Console.WriteLine($"🗂 Loaded cache [{Path.GetFileName(CurrentCacheFile)}] with {Cache.Count} entries");
-                Console.WriteLine();
+                if (loaded != null)
+                {
+                    // We must move items into the Case-Insensitive dictionary
+                    foreach (var kvp in loaded)
+                    {
+                        // Clean the key (remove newlines/tabs) while loading
+                        string cleanKey = kvp.Key.Replace("\r", "").Replace("\n", " ").Trim();
+                        Cache[cleanKey] = kvp.Value;
+                    }
+                    Console.WriteLine($"🗂 Loaded cache [{Path.GetFileName(CurrentCacheFile)}] with {Cache.Count} entries");
+                }
             }
             catch
             {
-                Cache = new Dictionary<string, string>();
                 Console.WriteLine($"⚠ Failed to read cache [{Path.GetFileName(CurrentCacheFile)}], starting fresh");
-                Console.WriteLine();
             }
         }
         else
         {
-            Cache = new Dictionary<string, string>();
             Console.WriteLine($"🗂 No existing cache [{Path.GetFileName(CurrentCacheFile)}], starting fresh");
-            Console.WriteLine();
         }
+        Console.WriteLine();
     }
 
     private static void SaveCache()
