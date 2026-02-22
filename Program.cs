@@ -82,11 +82,11 @@ class Program
     {
         // === GROUP 1: SEA-LION-v4-27B ===
         // (Southeast Asian & East Asian focus)
-        "km", "zh", "vi", "th", "ja", "lo", "id", "ms", "ko",
+        "km", "zh", "vi", "th", "ja", "lo", "ko", "id", "ms",
 
         // === GROUP 2: TranslateGemma-27B ===
         // (European & Western focus)
-        "fr", "de", "es", "nl", "it", "pt", "ru", "cs", "sv", "hi"
+        "fr", "de", "es", "nl", "it", "pt", "cs", "sv", "ru", "hi"
     };
 
     private static IReadOnlyList<string> TargetLangs => Languages.Where(l => l != "en").ToList();
@@ -125,7 +125,8 @@ class Program
         },
         ["zh"] = new()
         {
-            ["Wer rastet, der rostet."] = "谁停滞不前，谁就会生锈。"
+            ["The Khmer language has a unique sound and tone system, which can be difficult for learners to master. Our audio files feature native speakers pronouncing words and phrases correctly, allowing you to learn the correct intonation and rhythm."] = "高棉语拥有独特的语音和声调系统，这对学习者来说可能难以掌握。我们的音频文件由母语人士朗读单词和短语，帮助您学习正确的语调和节奏。",
+            ["Additionally, Kampot's natural beauty and proximity to attractions like the Bokor National Park and Kep beach make it an ideal location for those who love outdoor activities. The city's relaxed pace allows expats to enjoy a balanced life, blending work with exploration and leisure."] = "此外，贡布的自然美景以及毗邻博科国家公园和白马海滩等景点的地理位置，使其成为户外运动爱好者的理想之地。这座城市悠闲的生活节奏让外籍人士能够享受平衡的生活，将工作、探索和休闲完美融合。"
         }
     };
 
@@ -444,54 +445,62 @@ class Program
             var baseDoc = XDocument.Load(baseFile);
             var pageName = Path.GetFileNameWithoutExtension(baseFile);
 
-        string lastModel = "";
+            string lastModel = "";
 
-        foreach (var lang in targetLangs)
-        {
-            string activeModel = (lang == "km" || lang == "lo" || lang == "th" || lang == "vi" || 
-                                lang == "zh" || lang == "ja" || lang == "ko" || lang == "id" || lang == "ms") 
-                                ? "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest" 
-                                : "translategemma:27b";
-
-            if (activeModel != lastModel && !string.IsNullOrEmpty(lastModel))
+            foreach (var lang in targetLangs)
             {
-                Console.WriteLine($"🔄 MODEL SWITCH: Unloading {lastModel} and loading {activeModel}...");
-                Console.WriteLine("⏳ This may take 30-60 seconds ...");
+                string activeModel = (lang == "km" || lang == "lo" || lang == "th" || lang == "vi" || 
+                                    lang == "zh" || lang == "ja" || lang == "ko" || lang == "id" || lang == "ms") 
+                                    ? "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest" 
+                                    : "translategemma:27b";
+
+                if (activeModel != lastModel && !string.IsNullOrEmpty(lastModel))
+                {
+                    Console.WriteLine($"🔄 MODEL SWITCH: Unloading {lastModel} and loading {activeModel}...");
+                    Console.WriteLine("⏳ This may take 30-60 seconds ...");
+                    Console.WriteLine();
+                }
+                lastModel = activeModel;
+
+                CurrentCacheFile = Path.Combine(CacheFolder, $"cache_{lang}.json");
+                LoadCache();
+
+                Console.WriteLine($"🌍 {lang} (Using: {activeModel})");
+                Console.WriteLine();
+                
+                var stopwatch = Stopwatch.StartNew();
+
+                var newDoc = new XDocument(baseDoc);
+
+                foreach (var data in newDoc.Descendants("data"))
+                {
+                    var value = data.Element("value");
+                    if (value == null || string.IsNullOrWhiteSpace(value.Value))
+                        continue;
+
+                    var source = value.Value;
+                    var key = data.Attribute("name")?.Value ?? "alt";
+
+                    // Pass the activeModel to the translation function
+                    var translated = await TranslateAsync(source, lang, key, pageName, activeModel);
+                    if (translated != null)
+                    {
+                        value.Value = translated;
+                    }
+                }
+
+                var outPath = baseFile.Replace(".resx", $".{lang}.resx");
+                newDoc.Save(outPath);
+
+                stopwatch.Stop();
+                Console.WriteLine($"✅ Written {Path.GetFileName(outPath)} ({stopwatch.Elapsed.TotalSeconds:F2} sec)");
                 Console.WriteLine();
             }
-            lastModel = activeModel;
 
-            CurrentCacheFile = Path.Combine(CacheFolder, $"cache_{lang}.json");
-            LoadCache();
-
-            Console.WriteLine($"🌍 {lang} (Using: {activeModel})");
-            var stopwatch = Stopwatch.StartNew();
-
-            var newDoc = new XDocument(baseDoc);
-
-            foreach (var data in newDoc.Descendants("data"))
+            if (!string.IsNullOrEmpty(lastModel))
             {
-                var value = data.Element("value");
-                if (value == null || string.IsNullOrWhiteSpace(value.Value))
-                    continue;
-
-                var source = value.Value;
-                var key = data.Attribute("name")?.Value ?? "alt";
-
-                // Pass the activeModel to the translation function
-                var translated = await TranslateAsync(source, lang, key, pageName, activeModel);
-                if (translated != null)
-                {
-                    value.Value = translated;
-                }
+                await UnloadModelAsync(lastModel);
             }
-
-            var outPath = baseFile.Replace(".resx", $".{lang}.resx");
-            newDoc.Save(outPath);
-
-            stopwatch.Stop();
-            Console.WriteLine($"✅ Written {Path.GetFileName(outPath)} ({stopwatch.Elapsed.TotalSeconds:F2} sec)");
-        }
         }
 
         WriteFinalLog(workingResxFolders, specificResources);
@@ -505,6 +514,7 @@ class Program
     // ======================
     private static async Task<string?> TranslateAsync(string text, string lang, string key, string pageName, string modelName)
     {
+        // 1. KEY OVERRIDES (Hard-coded in Program.cs)
         if (KeyOverrides.TryGetValue(lang, out var langOverrides) &&
             langOverrides.TryGetValue(key, out var fixedTranslation))
         {
@@ -513,6 +523,24 @@ class Program
             return fixedTranslation;
         }
 
+        // 2. GLOSSARY CHECK (From glossary.json)
+        // We check if the 'key' (e.g., "welcome") exists for this language
+        if (Glossaries.TryGetValue(lang, out var glossary) && 
+            glossary.TryGetValue(key, out var glossaryValue))
+        {
+            Console.WriteLine($"📘 [Glossary Hit {lang} {key}] {text}\n➡️ {glossaryValue}");
+            Console.WriteLine();
+            FinalLog.AppendLine($"{lang} {key} | {glossaryValue} (Glossary)\n");
+        
+            // Optional: Save to cache so the AI doesn't run if the glossary entry is removed later
+            var cleanTxt = text.Replace("\r", "").Replace("\n", " ").Trim();
+            Cache[$"{lang}||{cleanTxt}"] = glossaryValue;
+            SaveCache();
+        
+            return glossaryValue;
+        }
+
+        // 3. CACHE CHECK
         string cleanText = text.Replace("\r", "").Replace("\n", " ").Trim();
         var cacheKey = $"{lang}||{cleanText}";
 
@@ -561,6 +589,21 @@ class Program
 
             var translated = result.ToString().Trim();
 
+            // If the source is a single line but the AI dumped a whole list (like your 'Questions and answers' dump)
+            if (!text.Contains("\n") && translated.Contains("\n"))
+            {
+                // Harvest only the first non-empty line
+                var lines = translated.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var firstLine = lines.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l))?.Trim();
+
+                // If the first line is just the key repeated or a header, try to find the actual translation
+                if (!string.IsNullOrEmpty(firstLine))
+                {
+                    translated = firstLine;
+                    Console.WriteLine($"✂️ [Auto-Cleaned] Reduced list dump to: {translated}");
+                }
+            }
+
             if (!text.EndsWith(".") && !text.EndsWith("!") && !text.EndsWith("?"))
             {
                 translated = translated.TrimEnd('.', '!', '?');
@@ -600,13 +643,6 @@ class Program
 private static string BuildPrompt(string text, string lang)
 {
     var langName = LangNames.GetValueOrDefault(lang, lang);
-
-    var glossarySection = "";
-    if (Glossaries.TryGetValue(lang, out var glossary) && glossary.Any())
-    {
-        glossarySection = "Use the following glossary: " +
-            string.Join(", ", glossary.Select(p => $"\"{p.Key}\" ➡️ \"{p.Value}\"")) + ".";
-    }
 
     // --- 1. NUMERIC FORMATTING ---
     string numberInstruction = lang switch
@@ -655,7 +691,6 @@ RULES:
 - Produce ONLY the translation. No explanations or commentary.
 - Do NOT include any English words in the output unless they are proper nouns.
 - The output must be fully written in {langName}.
-{glossarySection}
 
 
 {text}
@@ -886,18 +921,39 @@ RULES:
 
         try
         {
-            File.WriteAllText(
-                CurrentCacheFile,
-                JsonSerializer.Serialize(Cache, new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                })
-            );
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                // CRITICAL: Keeps Japanese/Vietnamese characters readable in the file
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+
+            File.WriteAllText(CurrentCacheFile, JsonSerializer.Serialize(Cache, options), Encoding.UTF8);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"⚠ Failed to save cache [{Path.GetFileName(CurrentCacheFile)}]: {ex.Message}");
+            Console.WriteLine($"⚠ Cache save error: {ex.Message}");
+        }
+    }
+
+    private static async Task UnloadModelAsync(string modelName)
+    {
+        if (string.IsNullOrEmpty(modelName)) return;
+
+        try
+        {
+            var payload = new { model = modelName, keep_alive = 0 };
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            
+            await Http.PostAsync(OllamaUrl, content);
+            
+            // Give the i7 and RAM a moment to settle after dropping 15GB+
+            Console.WriteLine($"\n🧠 CPU Memory Purged: {modelName}. Waiting for system to stabilize...");
+            await Task.Delay(3000); 
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\n⚠ Could not flush CPU memory: {ex.Message}");
         }
     }
 }

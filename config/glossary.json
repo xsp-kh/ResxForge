@@ -1,13 +1,5 @@
 {
   "km": {
-    "welcome": "change in"
-  },
-
-  "zh": {
-    "welcome": "config folder"
-  },
-
-  "vi": {
-    "welcome": "glossary.json"
+    "welcome": "glossary.json is in config folder"
   }
 }
