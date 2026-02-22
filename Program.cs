@@ -589,6 +589,10 @@ class Program
 
             var translated = result.ToString().Trim();
 
+            // Remove leading/trailing quotes (standard, Czech, or German style)
+            char[] quotes = { '"', '„', '“', '”', '\'' };
+            translated = translated.Trim(quotes);
+
             // If the source is a single line but the AI dumped a whole list (like your 'Questions and answers' dump)
             if (!text.Contains("\n") && translated.Contains("\n"))
             {
@@ -694,7 +698,7 @@ RULES:
 
 
 SOURCE TEXT: "{text}"
-{langName} TRANSLATION:
+{langName} TRANSLATION: "
 """;
 }
 
