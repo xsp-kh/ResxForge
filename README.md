@@ -8,6 +8,8 @@
 ResxForge automates translation of .NET resource files while maintaining control, consistency, and UI-safe rules.
 </p>
 
+![console app](cmd.jpg)
+
 <div class="section">
 <h2>Why ResxForge?</h2>
 <p>Traditional LLM translation workflows often lack the guardrails needed for production software. ResxForge adds:</p>
