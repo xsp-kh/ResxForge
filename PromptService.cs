@@ -1,14 +1,14 @@
 ﻿using System.Text.RegularExpressions;
 
-namespace ResxForge;
+namespace Translate;
 
-    internal static class PromptService
+internal static class PromptService
+{
+    internal static string BuildPrompt(string text, string lang, string langName, Dictionary<string, string>? glossary = null)
     {
-        internal static string BuildPrompt(string text, string lang, string langName, Dictionary<string, string>? glossary = null)
-        {
-            string glossaryInstruction = GetGlossaryInstruction(text, glossary);
-            string numberInstruction = GetNumberInstruction(lang, langName);
-            string styleInstruction = GetStyleInstruction(lang, langName);
+        string glossaryInstruction = GetGlossaryInstruction(text, glossary);
+        string numberInstruction = GetNumberInstruction(lang, langName);
+        string styleInstruction = GetStyleInstruction(lang, langName);
 
 return $"""
 [INST]
@@ -30,7 +30,7 @@ RULES:
 
 {text}
 """;
-}
+    }
     internal static string GetGlossaryInstruction(string text, Dictionary<string, string>? glossary)
     {
         if (glossary == null) return "";
@@ -95,88 +95,73 @@ RULES:
 
     internal static class NumericProcessor
     {
+        private static readonly Regex NumRegex = new Regex(@"\d{4}s|\d+(?:,\d{3})*(?:\.\d+)?", RegexOptions.Compiled);
+        private static readonly Regex PlaceholderRegex = new Regex(@"\[\[NUM(\d+)\]\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         public static NumericContext Preprocess(string text, string lang)
         {
             var context = new NumericContext();
-            var placeholders = new Dictionary<string, string>();
             int counter = 0;
 
-            string processed = Regex.Replace(text, @"\b\d+\b", match =>
+            context.ProcessedText = NumRegex.Replace(text, match =>
             {
-                int number = int.Parse(match.Value);
+                string val = match.Value;
 
-                if (lang == "th" && number >= 1000 && number <= 2099)
+                // Remove trailing 's' for decades
+                if (val.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                    val = val.Substring(0, val.Length - 1);
+
+                string cleanNum = val.Replace(",", "");
+
+                if (lang == "th" && long.TryParse(cleanNum, out long number))
                 {
-                    number += 543;
+                    if (number >= 1000 && number <= 2099)
+                        val = (number + 543).ToString();
                 }
 
-                string placeholder = $"__NUM{counter}__";
-                placeholders[placeholder] = number.ToString();
+                string placeholder = $"[[NUM{counter}]]";
+                context.Placeholders[placeholder] = val;
                 counter++;
-
                 return placeholder;
             });
 
-            context.ProcessedText = processed;
-            context.Placeholders = placeholders;
             return context;
         }
 
         internal static string Postprocess(string translated, NumericContext context, string lang)
         {
-            string result = translated;
+            if (context?.Placeholders == null) return translated;
 
-            foreach (var pair in context.Placeholders)
+            return PlaceholderRegex.Replace(translated, match =>
             {
-                result = result.Replace(pair.Key, pair.Value);
-            }
+                string key = match.Value;
+                var foundKey = context.Placeholders.Keys
+                    .FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
 
-            if (lang == "th")
-                result = ConvertThaiDigits(result);
+                if (foundKey == null) return key;
 
-            if (lang == "lo")
-                result = ConvertLaoDigits(result);
+                string val = context.Placeholders[foundKey];
 
-            if (lang == "km")
-                result = ConvertKhmerDigits(result);
-
-            return result;
+                return lang switch
+                {
+                    "th" => ConvertDigits(val, "๐๑๒๓๔๕๖๗๘๙"),
+                    "lo" => ConvertDigits(val, "໐໑໒໓໔໕໖໗໘໙"), 
+                    "km" => ConvertDigits(val, "០១២៣៤៥៦៧៨៩"),
+                    _ => val
+                };
+            });
         }
 
-        private static string ConvertThaiDigits(string s) =>
-            s.Replace("0", "๐")
-             .Replace("1", "๑")
-             .Replace("2", "๒")
-             .Replace("3", "๓")
-             .Replace("4", "๔")
-             .Replace("5", "๕")
-             .Replace("6", "๖")
-             .Replace("7", "๗")
-             .Replace("8", "๘")
-             .Replace("9", "๙");
-
-        private static string ConvertLaoDigits(string s) =>
-            s.Replace("0", "໐")
-             .Replace("1", "໑")
-             .Replace("2", "໒")
-             .Replace("3", "໓")
-             .Replace("4", "໔")
-             .Replace("5", "໕")
-             .Replace("6", "໖")
-             .Replace("7", "໗")
-             .Replace("8", "໘")
-             .Replace("9", "໙");
-
-        private static string ConvertKhmerDigits(string s) =>
-            s.Replace("0", "០")
-             .Replace("1", "១")
-             .Replace("2", "២")
-             .Replace("3", "៣")
-             .Replace("4", "៤")
-             .Replace("5", "៥")
-             .Replace("6", "៦")
-             .Replace("7", "៧")
-             .Replace("8", "៨")
-             .Replace("9", "៩");
+        private static string ConvertDigits(string input, string nativeDigits)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+            char[] chars = input.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (chars[i] >= '0' && chars[i] <= '9')
+                    chars[i] = nativeDigits[chars[i] - '0'];
+            }
+            return new string(chars);
+        }
     }
 }

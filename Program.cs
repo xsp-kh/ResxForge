@@ -1,21 +1,23 @@
 ﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 
-namespace ResxForge;
-
+namespace Translate;
 class Program
 {
-    // ======================
-    // CONFIG (HARD-CODED)
-    // ======================
+    private static string ModelSEA = "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest";
+    private static string ModelEU = "translategemma:27b";
+    private const string OllamaBaseUrl = "http://127.0.0.1:11434"; 
+    private static string OllamaGenerateUrl => $"{OllamaBaseUrl}/api/generate";
+    private static string OllamaTagsUrl => $"{OllamaBaseUrl}/api/tags";
 
-    private static string OllamaModel = "aisingapore/Gemma-SEA-LION-v4-27B-IT:latest";
-    private const string OllamaUrl = "http://127.0.0.1:11434/api/generate";
-    private static readonly HashSet<string> Excluded =
-        new(StringComparer.OrdinalIgnoreCase) { "AccommodationsFolder", "RestaurantsFolder" };
+    private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase) { "AccommodationsFolder", "RestaurantsFolder" };
+
+    private static readonly string ReviewLogPath = Path.Combine( Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "review.log" );
+    private static readonly HashSet<string> ReviewLogExcludedPages = new(StringComparer.OrdinalIgnoreCase)  { "boinc" };
+
     //private const string ResxFolder = @"C:\Users\xxx\source\repos\ResxForge\Resources";
     //private const string ConfigFolder = @"C:\Users\xxx\source\repos\ResxForge\config";
     //private const string CacheFolder = @"C:\Users\xxx\source\repos\ResxForge\cache";
@@ -47,16 +49,8 @@ class Program
     private static readonly string ResxFolder =
         Path.Combine(ProjectRoot, "Resources");
 //>
-    private static readonly HashSet<string> ReviewLogExcludedPages =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "boinc"
-        };
-    private static readonly string ReviewLogPath =
-    Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-        "review.log"
-    );
+    private static string GlossaryPath = Path.Combine(ConfigFolder, "glossary.json");
+    private static string EchoPath = Path.Combine(ConfigFolder, "echo.json");
 
     private static readonly StringBuilder FinalLog = new();
     private static readonly HttpClient Http = new()
@@ -73,7 +67,7 @@ class Program
         Console.CancelKeyPress += (s, e) =>
         {
             StopOllama();
-            e.Cancel = false;
+            Environment.Exit(0); 
         };
     }
 
@@ -82,12 +76,10 @@ class Program
     // ======================
     private static readonly List<string> Languages = new()
     {
-        // === GROUP 1: SEA-LION-v4-27B ===
-        // (Southeast Asian & East Asian focus)
+        // === GROUP 1: ModelSEA ===
         "km", "zh", "vi", "th", "ja", "lo", "ko", "id", "ms",
 
-        // === GROUP 2: TranslateGemma-27B ===
-        // (European & Western focus)
+        // === GROUP 2: ModelEU ===
         "fr", "de", "es", "nl", "it", "pt", "cs", "sv", "ru", "hi"
     };
 
@@ -139,12 +131,7 @@ class Program
     private static FileSystemWatcher? GlossaryWatcher;
     private static FileSystemWatcher? EchoWatcher;
     private static Dictionary<string, HashSet<string>> GlossarySnapshot = new(StringComparer.OrdinalIgnoreCase);
-
-    private static Dictionary<string, Dictionary<string, string>> Glossaries =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private static string GlossaryPath =
-        Path.Combine(ConfigFolder, "glossary.json");
+    private static Dictionary<string, Dictionary<string, string>> Glossaries = new(StringComparer.OrdinalIgnoreCase);
 
     private static void LoadGlossary()
     {
@@ -253,14 +240,9 @@ class Program
         public Dictionary<string, List<string>> Languages { get; set; } = new();
     }
 
-    private static HashSet<string> GlobalEchoExclusions =
-        new(StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> GlobalEchoExclusions = new(StringComparer.OrdinalIgnoreCase);
 
-    private static Dictionary<string, HashSet<string>> EchoExclusions =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private static string EchoPath =
-        Path.Combine(ConfigFolder, "echo.json");
+    private static Dictionary<string, HashSet<string>> EchoExclusions = new(StringComparer.OrdinalIgnoreCase);
 
     private static void LoadEchoConfig()
     {
@@ -296,7 +278,7 @@ class Program
     }
 
     // ======================
-    // GENERIC HOT RELOAD 
+    // HOT RELOAD 
     // ======================
     private static void StartHotReload(
         string filePath,
@@ -627,7 +609,7 @@ class Program
             var payload = new { model = modelName, keep_alive = 0 };
             var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
             
-            await Http.PostAsync(OllamaUrl, content);
+            await Http.PostAsync(OllamaGenerateUrl, content);
             
             Console.WriteLine($"\n🧠 CPU Memory Purged: {modelName}. Waiting for system to stabilize...");
             await Task.Delay(3000); 
@@ -714,7 +696,7 @@ class Program
         try
         {
             var response = await Http.PostAsync(
-                OllamaUrl,
+                OllamaGenerateUrl,
                 new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             );
 
@@ -792,20 +774,17 @@ class Program
     {
         try
         {
-            var payload = new
-            {
-                model = OllamaModel,
-                prompt = "ping",
-                temperature = 0,
-                max_tokens = 1
-            };
+            var response = await Http.GetAsync(OllamaTagsUrl);
+            
+            if (!response.IsSuccessStatusCode) 
+                return false;
 
-            var response = await Http.PostAsync(
-                OllamaUrl,
-                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-            );
+            var json = await response.Content.ReadAsStringAsync();
+            
+            bool hasSeaLion = json.Contains(ModelSEA);
+            bool hasTranslateGemma = json.Contains(ModelEU);
 
-            return response.IsSuccessStatusCode;
+            return hasSeaLion && hasTranslateGemma;
         }
         catch
         {
@@ -851,8 +830,13 @@ class Program
             if (OllamaProcess != null && !OllamaProcess.HasExited)
             {
                 Console.WriteLine("🛑 Stopping Ollama server...");
-                OllamaProcess.Kill();
-                OllamaProcess.WaitForExit(3000);
+                
+                OllamaProcess.CloseMainWindow(); 
+                
+                if (!OllamaProcess.WaitForExit(2000))
+                {
+                    OllamaProcess.Kill();
+                }
             }
         }
         catch { }
