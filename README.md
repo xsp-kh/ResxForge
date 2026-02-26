@@ -86,13 +86,27 @@ private const string CacheFolder = @"C:\YourPath\cache";</code></pre>
 <h2>Usage</h2>
 <h3>Basic</h3>
 <pre><code>dotnet run</code></pre>
+  
+<h3>Debug Mode (The "Teacher's View")</h3>
+<p>To see exactly how the AI is being instructed and how the glossary is being injected:</p>
+<pre><code>dotnet run -- -v</code></pre>
+</div>
+
+<pre>
+-h  | Help
+-l  | translating only one language | Example: -l zh
+-p  | Razor Page | -p seahorse or -p seahorse durian
+-d  | add directoty to path | -d city or -d city offices
+-f  | force overwrite cache
+-v  | Debug Mode
+</pre>
+  
 <h3>Batch Options</h3>
 <p>Available build variants for high-volume folder processing:</p>
 <pre>
 <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch</code>
 <code>dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:AppVariant=batch-parallel</code>
 </pre>
-</div>
 
 <div class="section">
 <h2>Configuration</h2>
@@ -109,6 +123,16 @@ Remove the <code>//</code> at the beginning of each line to uncomment them.<br><
 "km": { "Welcome": "ស្វាគមន៍" },
 "de": { "City Hall": "Rathaus" }
 }</code></pre>
+
+<div class="section">
+<h2>Advanced Translation Logic</h2>
+<ul>
+<li><strong>Hybrid Numerals:</strong> Intelligently uses Khmer/Thai numerals for dates and headers while maintaining Arabic numerals for prices and technical IDs.</li>
+<li><strong>European Formatting:</strong> Automatically formats thousands and decimals according to regional standards (e.g., <code>1.234,56</code> for DE/CS vs. <code>1 234,56</code> for SV).</li>
+<li><strong>Anti-Hyphenation (sv/de/nl):</strong> Strictly enforces compound word construction for Germanic languages, preventing "Machine-Translated" hyphen artifacts.</li>
+<li><strong>Verbose Debugging:</strong> Run with <code>-v</code> to see the full "Teaching Prompt," glossary injection, and model reasoning for any string.</li>
+</ul>
+</div>
 
 <h3>Echo Rules</h3>
 <p>Location: <code>/config/echo.json</code></p>
@@ -135,7 +159,18 @@ If this tool saved you time, you can support development:
 </ul>
 </div>
 
+<div class="section">
+<h2>License & Commercial Terms</h2>
+<p>
+<strong>Source Available:</strong> This project is licensed under the <strong>MIT License + Commons Clause</strong>.
+</p>
+<ul>
+<li><strong>Personal & Internal Use:</strong> 100% Free. You can use this for your own apps or within your company.</li>
+<li><strong>Commercial Sale:</strong> You <u>cannot</u> sell this software, or sell a service based on this software, without a separate commercial agreement.</li>
+</ul>
+<p>For commercial licensing or custom language model fine-tuning (SeaLion/Gemma), please contact the maintainer.</p>
+</div>
+
 <footer>
-MIT License<br>
-© 2026 ResxForge
+© 2026 ResxForge | MIT License + Commons Clause
 </footer>
