@@ -115,7 +115,7 @@ private const string CacheFolder = @"C:\YourPath\cache";</code></pre>
 <div class="section">
 <h2>Configuration</h2>
 <p><strong>Step 1:</strong> Open <code>Program.cs</code> in the project.<br><br>
-<strong>Step 2:</strong> Find the three lines below.
+<strong>Step 2:</strong> Find the three lines below.<br><br>
 <strong>Step 3:</strong> Make sure the folder paths point to locations <em>outside</em> this repository on your computer (for example, a folder in your Documents or another workspace).<br><br>
 <strong>Step 4:</strong> Delete the block of code between the <code>//></code> and <code>//<</code> markers.
 </div>
@@ -134,10 +134,16 @@ private const string CacheFolder = @"C:\YourPath\cache";</code></pre>
 <h3>No-Translate (Exclusion List)</h3>
 <p>Location: <code>/config/no_translate.json</code></p>
 <p>Items in this list are completely ignored by the translation engine. Use this for SKU numbers, brand names, or specific technical keys that must remain in the source language. Active when running with the <code>-n</code> flag.</p>
-<pre><code>{
-"keys": ["App_Version", "Support_Email"],
-"values": ["ResxForge", "Microsoft"]
-}</code></pre>
+<pre><code>
+{
+  "no_translate": [
+    "kampot.city",
+    "www.kampot.city",
+    "LUXlife",
+    "BOINC"
+  ]
+}
+</code></pre>
 </div>
 
 <div class="section">
@@ -150,12 +156,17 @@ private const string CacheFolder = @"C:\YourPath\cache";</code></pre>
 </ul>
 </div><h3>Echo Rules</h3>
 <p>Location: <code>/config/echo.json</code></p>
-<pre><code>{
-"global": ["(FAQ)"],
-"languages": {
-"de": ["Mango"]
+<pre><code>
+{
+  "global": [
+    "(FAQ)"
+  ],
+  "languages": {
+    "es": ["Mango"]
+  }
 }
-}</code></pre><p>
+</code></pre>
+<p>
 <strong>Important:</strong> Echo exclusions do not bypass script validation. For non-Latin languages (Khmer, Chinese, Japanese, etc.), translations containing Latin characters (A–Z) will still trigger a script leakage warning to prevent accidental English leaks.
 </p>
 </div>
